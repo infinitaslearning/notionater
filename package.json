@@ -1,0 +1,24 @@
+{
+  "name": "notionater",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "https://github.com/cliftonc",
+  "license": "MIT",
+  "bin": {
+    "notionater": "./index.js"
+  },
+  "dependencies": {
+    "@instantish/martian": "^1.0.3",
+    "@notionhq/client": "^0.4.4",
+    "commander": "^8.3.0",
+    "dotenv": "^10.0.0",
+    "fast-glob": "^3.2.7",
+    "glob": "^7.2.0",
+    "prompts": "^2.4.2",
+    "string-progressbar": "^1.0.4"
+  }
+}
