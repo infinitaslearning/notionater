@@ -44,32 +44,36 @@ const folderPaths = {};
 const processFilePath = async(path, parents, parentPageId) => {
   if (!folderPaths[path]) {
     console.log('Creating folder page: ' + path + ' ...');
-    const response = await notion.pages.create({
-      parent: {
-        page_id: parents.length > 0 ? parents[parents.length - 1] : parentPageId,
-      },
-      icon: {
-        type: "emoji",
-        emoji: "📁"
-      },
-      properties: {
-        title: {
-          id: 'title',
-          type: 'title',
-          title: [
-            {
-              text: {
-                content: decodeURI(path),
-              }
-            },
-          ],
+    try {
+      const response = await notion.pages.create({
+        parent: {
+          page_id: parents.length > 0 ? parents[parents.length - 1] : parentPageId,
+        },
+        icon: {
+          type: "emoji",
+          emoji: "📁"
+        },
+        properties: {
+          title: {
+            id: 'title',
+            type: 'title',
+            title: [
+              {
+                text: {
+                  content: decodeURI(path),
+                }
+              },
+            ],
+          }
         }
-      }
-    });
-    // Store it for later
-    folderPaths[path] = response.id;
+      });
+      // Store it for later
+      folderPaths[path] = response.id;
+    } catch(ex) {
+      console.log(ex.message);
+    }
   }
-  return folderPaths[path]
+  return folderPaths[path];
 }
 
 const processFile = async (file, parentPageId) => {
@@ -77,17 +81,27 @@ const processFile = async (file, parentPageId) => {
   // First we need to ensure we have all the parent pages created
   const path = file.split("/");
   const fileName = path.pop(); // lose the file
+  let blocks, fileText;
   const parents = await path.reduce(async (memo, path) => {
     const results = await memo;
     const result = await processFilePath(path, results, parentPageId);
     return [...results, result];
   }, []);
 
-  // Now create our actual file
-  const fileText = fs.readFileSync(file, 'utf8');
-  const blocks = markdownToBlocks(fileText);
+  console.log('Processing markdown file: ' + fileName + ' ...');
 
-  console.log('Importing markdown file: ' + fileName + ' ...');
+  // Now create our actual file
+  try {
+    fileText = fs.readFileSync(file, 'utf8');
+
+    // Devops does crazy things with headers, so lets give it some space
+    fileText = fileText.replaceAll(/[#]\b/g,'# ');
+
+    blocks = markdownToBlocks(fileText);
+  } catch(ex) {
+    console.log(ex);
+    return 'Failed';
+  }
 
   try {
     const response = await notion.pages.create({
