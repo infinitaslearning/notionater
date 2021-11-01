@@ -77,6 +77,130 @@ const processFilePath = async(path, parents, parentPageId) => {
   return folderPaths[path];
 }
 
+const postParseTables = (blocks) => {
+
+   // We want to convert the tables to databases, and strip them from the document
+  const filteredBlocks = [];
+  const tables = [];
+  let tableNumber = 0;
+
+  for (const block of blocks) {
+    if (block.object !== 'unsupported') filteredBlocks.push(block);
+    if (block.object === 'unsupported' && block.type === 'table') {
+      // Create a dummy block
+      tableNumber++;
+      tables.push(block);
+      filteredBlocks.push( {
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {
+          "text": [
+            {
+              "type": "text",
+              "annotations": {
+                "italic": true,
+                "color": "orange"
+              },
+              "text": {
+                "content": `Table moved - see linked Database ${tableNumber}`
+              }
+            }
+          ]
+        }
+      });
+    }
+  }
+
+  return { filteredBlocks, tables };
+}
+
+const createTables = async (tables, parentPageId, parentPageTitle) => {
+
+  // Now we have a page, create the tables!
+  let tableNumber = 0;
+  for (const table of tables) {
+    tableNumber++;
+    let tableData = table.table.children.map((rows) => {
+      return rows.table_row.children.map((cells) => {
+        if (cells.table_cell.children) {
+          return cells.table_cell.children[0].text.content;
+        } else {
+          return 'Column';
+        }
+      })
+    });
+    let tableHeader = tableData.shift();
+    let tableHeaderProperties =  {};
+
+    tableHeader.forEach((header, index) => {
+      if(index === 0) {
+        tableHeaderProperties[header] = {
+          title: {}
+        }
+      } else {
+        tableHeaderProperties[header] = {
+          rich_text: {}
+        }
+      }
+    });
+
+    console.log(`Adding table to ${parentPageTitle} with ${tableData.length} rows ...`);
+
+    const database = await notion.databases.create({
+      parent: {
+        page_id: parentPageId,
+      },
+      title: [{
+        type: 'text',
+        text: {
+          content: `${parentPageTitle} - Database ${tableNumber}`,
+        }
+      }],
+      properties: tableHeaderProperties
+    });
+
+    const databaseId = database.id;
+
+    for(const tableRow in tableData) {
+
+      let tableDataProperties = {};
+
+      tableHeader.forEach((header, index) => {
+        if(index === 0) {
+          tableDataProperties[header] = {
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": tableData[tableRow][index] || ''
+                }
+              }
+            ]
+          };
+        } else {
+          tableDataProperties[header] = {
+            "rich_text": [{
+                "type": "text",
+                "text": {
+                  "content": tableData[tableRow][index] || ''
+                }
+            }],
+          }
+        }
+      });
+
+      const row = await notion.pages.create({
+        parent: {
+          database_id: databaseId,
+        },
+        properties: tableDataProperties,
+      });
+
+    }
+
+  }
+}
+
 const processFile = async (file, parentPageId) => {
 
   // First we need to ensure we have all the parent pages created
@@ -102,12 +226,14 @@ const processFile = async (file, parentPageId) => {
       };
     };
 
-    blocks = markdownToBlocks(fileText);
+    let postSaveFn = async () => { }
+    const unsupported = true;
+    blocks = markdownToBlocks(fileText, unsupported);
 
     // Execute post-parse plugins
     for (const plugin of plugins) {
       if(plugin.postParse) {
-        fileText = await plugin.postParse(blocks);
+        blocks = await plugin.postParse(blocks, notion, postSaveFn);
       };
     };
   } catch(ex) {
@@ -115,6 +241,9 @@ const processFile = async (file, parentPageId) => {
     return 'Failed';
   }
 
+  let { filteredBlocks, tables } = postParseTables(blocks);
+
+  const pageTitle = decodeURI(fileName).replace('.md','');
   try {
     const response = await notion.pages.create({
       parent: {
@@ -133,8 +262,13 @@ const processFile = async (file, parentPageId) => {
           ],
         }
       },
-      children: blocks,
+      children: filteredBlocks,
     });
+
+    if (tables.length) {
+      await createTables(tables, response.id, pageTitle);
+    }
+
   } catch(ex) {
     console.log(ex.message);
   }

@@ -47,7 +47,7 @@ const lookupUser = async (user) => {
 
 exports.preParse = async (fileText) => {
   // Devops does crazy things with headers, so lets give it some space
-  fileText = fileText.replaceAll(/^(#{1,})(\S.*)/ugm, `$1 $2`);
+  fileText = fileText.replaceAll(/(^|[ ])(#{1,5})(?!#)(\S.*?)/ugm, `$2 $3`);
 
   // Replace tabs with 2 spaces
   fileText = fileText.replaceAll(/\t/g, '  ');
@@ -70,8 +70,4 @@ exports.preParse = async (fileText) => {
   }
 
   return fileText;
-}
-
-exports.postParse = async (blocks) => {
-  return blocks;
 }
