@@ -16,7 +16,7 @@ try {
   userCache = require(cacheFile);
   console.log(`Loaded ${Object.keys(userCache).length} users from cache :D`)
 } catch(ex) {
-  console.log(ex);
+  console.log(`No users loaded from cache`);
   userCache = {};
 }
 
@@ -32,12 +32,11 @@ const lookupUser = async (user) => {
     if (userCache[user]) return userCache[user];
     // Go for it
     try {
-      process.stdout.write(`Looking up user ${user} ...`);
       const userGuid = user.replace('@<','').replace('>','');
       const stdout = await spawn('az', ['devops', 'user', 'show', '--user', userGuid])
       const userData = JSON.parse(stdout)
       userCache[user] = `@${userData.user.directoryAlias}`;
-      process.stdout.write(` ${userCache[user]}\n`);
+      process.stdout.write(` ${userCache[user]}`);
       persistUserCache();
       return userCache[user];
     } catch(ex) {
@@ -55,11 +54,16 @@ exports.preParse = async (fileText) => {
 
   if (devopsUsers && devopsUsers.length >> 0) {
     // Look them up
+    const lookupFns = [];
     for (const user of devopsUsers) {
-      const devopsUser = await lookupUser(user);
-      fileText = fileText.replaceAll(user, devopsUser);
+      lookupFns.push(lookupUser(user));
     };
+    process.stdout.write(`Looking up users ...`);
+    const result = await Promise.all(lookupFns);
+    process.stdout.write(`... done\n`);
+    devopsUsers.forEach((user, index) => {
+      fileText = fileText.replaceAll(user, result[index]);
+    });
+    return fileText;
   }
-
-  return fileText;
 }
