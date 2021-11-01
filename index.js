@@ -102,8 +102,6 @@ const processFile = async (file, parentPageId) => {
       };
     };
 
-    console.log(fileText)
-
     blocks = markdownToBlocks(fileText);
 
     // Execute post-parse plugins
