@@ -32,11 +32,12 @@ const lookupUser = async (user) => {
     if (userCache[user]) return userCache[user];
     // Go for it
     try {
-      console.log(`Looking up user ${user} ...`);
+      process.stdout.write(`Looking up user ${user} ...`);
       const userGuid = user.replace('@<','').replace('>','');
       const stdout = await spawn('az', ['devops', 'user', 'show', '--user', userGuid])
       const userData = JSON.parse(stdout)
       userCache[user] = `@${userData.user.directoryAlias}`;
+      process.stdout.write(` ${userCache[user]}\n`);
       persistUserCache();
       return userCache[user];
     } catch(ex) {
