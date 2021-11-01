@@ -6,8 +6,8 @@ const { Command } = require('commander');
 const { Client } = require("@notionhq/client");
 const fg = require('fast-glob');
 const fs = require('fs');
-
 const {markdownToBlocks, markdownToRichText} = require('@instantish/martian');
+const plugins = [];
 
 /**
  * Parse cmd line
@@ -17,6 +17,7 @@ program
   .option('-t, --token <token>', 'Notion token (https://www.notion.so/my-integrations)')
   .option('-p, --page <page>', 'Page title to import under', '')
   .option('-g, --glob <glob>', 'Glob to find files to import')
+  .option('-x, --extend <plugins>','Add plugins to the processing chain, e.g. -x devops-users','none')
 
 program.parse(process.argv);
 const options = program.opts();
@@ -92,12 +93,25 @@ const processFile = async (file, parentPageId) => {
 
   // Now create our actual file
   try {
-    fileText = fs.readFileSync(file, 'utf8');
+    fileText = fs.readFileSync(file, 'utf8').toString();
 
-    // Devops does crazy things with headers, so lets give it some space
-    fileText = fileText.replaceAll(/[#]\b/g,'# ');
+    // Execute pre-parse plugins
+    for (const plugin of plugins) {
+      if(plugin.preParse) {
+        fileText = await plugin.preParse(fileText);
+      };
+    };
+
+    console.log(fileText)
 
     blocks = markdownToBlocks(fileText);
+
+    // Execute post-parse plugins
+    for (const plugin of plugins) {
+      if(plugin.postParse) {
+        fileText = await plugin.postParse(fileText);
+      };
+    };
   } catch(ex) {
     console.log(ex);
     return 'Failed';
@@ -130,7 +144,20 @@ const processFile = async (file, parentPageId) => {
   return 'OK';
 }
 
+const loadPlugins = (pluginsToLoad) => {
+  if (pluginsToLoad[0] === 'none') return;
+  pluginsToLoad.forEach((plugin) => {
+    try {
+      plugins.push(require(`./plugins/${plugin}`));
+    } catch(ex) {
+      console.log('Error loading plugin', ex.message);
+    }
+  });
+}
+
 const start = async () => {
+
+  const plugins = loadPlugins(options.extend.split(','));
 
   const files = await fg([options.glob]);
 
