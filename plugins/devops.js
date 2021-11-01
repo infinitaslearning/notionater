@@ -35,7 +35,7 @@ const lookupUser = async (user) => {
       const userGuid = user.replace('@<','').replace('>','');
       const stdout = await spawn('az', ['devops', 'user', 'show', '--user', userGuid])
       const userData = JSON.parse(stdout)
-      userCache[user] = `@${userData.user.directoryAlias}`;
+      userCache[user] = `@${userData.user.displayName}`;
       process.stdout.write(` ${userCache[user]}`);
       persistUserCache();
       return userCache[user];
