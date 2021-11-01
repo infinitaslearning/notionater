@@ -107,7 +107,7 @@ const processFile = async (file, parentPageId) => {
     // Execute post-parse plugins
     for (const plugin of plugins) {
       if(plugin.postParse) {
-        fileText = await plugin.postParse(fileText);
+        fileText = await plugin.postParse(blocks);
       };
     };
   } catch(ex) {
