@@ -64,6 +64,7 @@ exports.preParse = async (fileText) => {
     devopsUsers.forEach((user, index) => {
       fileText = fileText.replaceAll(user, result[index]);
     });
-    return fileText;
   }
+
+  return fileText;
 }
