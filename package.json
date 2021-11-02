@@ -1,6 +1,6 @@
 {
   "name": "notionater",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -11,6 +11,7 @@
   "bin": {
     "notionater": "./index.js"
   },
+  "repository": "https://github.com/infinitaslearning/notionater",
   "dependencies": {
     "@instantish/martian": "github:cliftonc/martian#upgrade-fix",
     "@notionhq/client": "^0.4.4",
