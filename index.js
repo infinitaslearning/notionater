@@ -8,6 +8,7 @@ const fg = require('fast-glob');
 const fs = require('fs');
 const {markdownToBlocks, markdownToRichText} = require('@instantish/martian');
 const plugins = [];
+const { toSentenceCase } = require('js-convert-case');
 
 /**
  * Parse cmd line
@@ -61,7 +62,7 @@ const processFilePath = async(path, parents, parentPageId) => {
             title: [
               {
                 text: {
-                  content: decodeURI(path),
+                  content: toSentenceCase(decodeURI(path)),
                 }
               },
             ],
@@ -144,7 +145,7 @@ const createTables = async (tables, parentPageId, parentPageTitle) => {
       }
     });
 
-    console.log(`Adding table to ${parentPageTitle} with ${tableData.length} rows ...`);
+    console.log(`Adding table to '${parentPageTitle}' with ${tableData.length} rows ...`);
 
     const database = await notion.databases.create({
       parent: {
@@ -243,7 +244,7 @@ const processFile = async (file, parentPageId) => {
 
   let { filteredBlocks, tables } = postParseTables(blocks);
 
-  const pageTitle = decodeURI(fileName).replace('.md','');
+  const pageTitle = toSentenceCase(decodeURI(fileName).replace('.md',''));
   try {
     const response = await notion.pages.create({
       parent: {
@@ -256,7 +257,7 @@ const processFile = async (file, parentPageId) => {
           title: [
             {
               text: {
-                content: decodeURI(fileName).replace('.md',''),
+                content: pageTitle,
               }
             },
           ],
