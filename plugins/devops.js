@@ -71,3 +71,8 @@ exports.preParse = async (fileText) => {
 
   return fileText;
 }
+
+
+exports.postParse = async (blocks) => {
+  return blocks;
+}

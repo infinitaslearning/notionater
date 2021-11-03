@@ -312,7 +312,9 @@ const start = async () => {
   }
 
   const pages = response.results.map((page) => {
-    return { title: page.properties.title.title[0].plain_text, 'value': page.id }
+    if (page.properties.title) {
+      return { title: page.properties.title.title[0].plain_text, 'value': page.id }
+    }
   });
 
   const selectedPage = await prompts({
