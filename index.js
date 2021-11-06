@@ -6,6 +6,7 @@ const { Command } = require('commander');
 const { Client } = require("@notionhq/client");
 const fg = require('fast-glob');
 const fs = require('fs');
+const path = require('path');
 const {markdownToBlocks, markdownToRichText} = require('@tryfabric/martian');
 const plugins = [];
 const { toSentenceCase } = require('js-convert-case');
@@ -16,12 +17,25 @@ const { toSentenceCase } = require('js-convert-case');
 const program = new Command();
 program
   .option('-t, --token <token>', 'Notion token (https://www.notion.so/my-integrations)')
-  .option('-p, --page <page>', 'Page title to import under', '')
+  .option('-b, --basePage <page>', 'Page title to import under', '')
   .option('-g, --glob <glob>', 'Glob to find files to import')
-  .option('-x, --extend <plugins>','Add plugins to the processing chain, e.g. -x devops-users','none')
+  .option('-p, --plugins <plugins>','Add plugins to the processing chain, e.g. -x devops-users','none')
+  .option('-i, --images <imagePath>','If local images are referenced, what to use as the base path','.')
+  .option('-c, --config <config>','Path to a config json file')
+  .option('--azureBlobUrl <azureBlobUrl>','Azure blob storage url')
+  .option('--azureBlobAccount <azureBlobAccount>','Azure Blob storage account');
 
 program.parse(process.argv);
-const options = program.opts();
+let options = program.opts();
+
+if (options.config) {
+  try {
+    const config = require(path.resolve(options.config))
+    options = { ...options, ...config };
+  } catch(ex) {
+    console.log(`Error parsing config: ${ex.message}`);
+  }
+}
 
 /**
  * Setup notion client
@@ -227,14 +241,13 @@ const processFile = async (file, parentPageId) => {
       };
     };
 
-    let postSaveFn = async () => { }
-    const unsupported = true;
-    blocks = markdownToBlocks(fileText, unsupported);
+    let postSaveFn = async () => { }    
+    blocks = markdownToBlocks(fileText, { strictImageUrls: false, allowUnsupportedObjectType: true });
 
     // Execute post-parse plugins
     for (const plugin of plugins) {
       if(plugin.postParse) {
-        blocks = await plugin.postParse(blocks, notion, postSaveFn);
+        blocks = await plugin.postParse(blocks, notion, options);
       };
     };
   } catch(ex) {
@@ -290,7 +303,7 @@ const loadPlugins = (pluginsToLoad) => {
 
 const start = async () => {
 
-  const plugins = loadPlugins(options.extend.split(','));
+  loadPlugins(options.plugins.split(','));
 
   const files = await fg([options.glob]);
 
@@ -300,7 +313,7 @@ const start = async () => {
   }
 
   const response = await notion.search({
-    query: options.page,
+    query: options.basePage,
     filters: {
       archived: false
     }
@@ -328,6 +341,12 @@ const start = async () => {
     return;
   }
 
+  // Execute setup plugins
+  for (const plugin of plugins) {
+    if(plugin.initialise) {
+      blocks = await plugin.initialise(blocks, notion, options);
+    };
+  };
 
   const res = await files.reduce(async (memo, file) => {
     const results = await memo;

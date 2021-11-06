@@ -13,8 +13,8 @@
   },
   "repository": "https://github.com/infinitaslearning/notionater",
   "dependencies": {
-    "@tryfabric/martian": "github:cliftonc/martian#upgrade-fix",
     "@notionhq/client": "^0.4.4",
+    "@tryfabric/martian": "github:cliftonc/martian#better-images",
     "await-spawn": "^4.0.2",
     "commander": "^8.3.0",
     "dotenv": "^10.0.0",

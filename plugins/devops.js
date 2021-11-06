@@ -6,6 +6,8 @@
 
 const spawn = require('await-spawn')
 const fs = require('fs')
+const path = require('path')
+const fg = require('fast-glob');
 const {stat, mkdir} = require('fs/promises')
 const modulePath = __dirname;
 const cacheFile = `${modulePath}/devops-cache.json`;
@@ -72,7 +74,53 @@ exports.preParse = async (fileText) => {
   return fileText;
 }
 
-
-exports.postParse = async (blocks) => {
-  return blocks;
+exports.postParse = async (blocks, notion, options) => {
+  const allowedTypes = [
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.gif',
+    '.tif',
+    '.tiff',
+    '.bmp',
+    '.svg',
+    '.heic',
+  ];
+  const postBlocks = [];
+  for(const index in blocks) {  
+    const block = blocks[index];
+    if (block.type === 'image') {      
+      // Process the image!
+      const imageUrl = decodeURI(block.image.external.url);
+      try {
+        const parsedUrl = new URL(imageUrl);
+         const fileType = path.extname(parsedUrl.pathname);
+         if (allowedTypes.includes(fileType)) {
+          postBlocks.push(block);
+         }                 
+      } catch(ex) {
+        // Need to upload 
+        const file = path.join(options.images, decodeURI(imageUrl))        
+        const fileName = path.basename(file);
+        if (fs.existsSync(file)) {
+          // Send off 
+          try {
+            console.log(`Uploading ${file} ...`);
+            const sendFile = await spawn('az', ['storage', 'blob', 'upload', '--file', `${file}`,'-c','$web','--account-name', options.azureBlobAccount]);            
+            const newUrl = `${options.azureBlobUrl}${encodeURI(fileName)}`;
+            block.image.external.url = newUrl;
+            console.log(`File available at ${newUrl} ...`);            
+            postBlocks.push(block);
+          } catch(e) {
+            console.log(`Error uploading file: ${e.stderr.toString()}`);
+          }
+        } else {
+          console.log(`Could not find image ${file} ... check the images path?`);
+        }       
+      }      
+    } else {
+      postBlocks.push(block);
+    }
+  };  
+  return postBlocks;
 }

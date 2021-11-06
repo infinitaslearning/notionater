@@ -6,6 +6,10 @@ Aim is to be able to point this script at a folder full of markdown (e.g. from c
 - Supports nested folders, creates blank pages for folders
 - Parses markdown to blocks via https://github.com/instantish/martian
 - Allows you to search for parent page to import
+- Devops plugin allows you to import:
+  - User references
+  - Images (if you provide an Azure blob storage account)
+  - Tables are converted to databases
 
 # Usage
 
@@ -21,7 +25,27 @@ Finally, go to a command line:
 npmx notionater -t secret_XXXX -g 'my-folder/**/**.md' -p 'Getting Started'
 ```
 
-It assumes that `my-folder` is a set of nested folders containing markdown.  Note that I dont think images work yet, but haven't tried it.
+It assumes that `my-folder` is a set of nested folders containing markdown.
+
+For real usage, I recommend you use a config file as it makes it easier to manage (e.g. this is `config.json`)
+
+```json
+{
+  "token": "secret_XXXX",
+  "glob": "ImportFolder/**/**.md",
+  "basePage": "Import Folder",
+  "plugins": "devops",
+  "images": "/Users/cliftonc/work/ImportFolder/",
+  "azureBlobUrl": "https://azureBlob.z6.web.core.windows.net/",
+  "azureBlobAccount": "azureBlob"
+}
+```
+
+and then:
+
+```
+npmx notionater -c config.json
+```
 
 # Plugins
 
@@ -49,7 +73,15 @@ export.postParse = async (blocks) {
 
 ### devops
 
-This fixes header markup, and looks up users based on Guids, using the Azure CLI - this needs to be installed and configured separately, the plugins will fail if it is not installed and authenticated.  It caches the user lookups in a local file for subsequent loads - as it isn't fast.
+This fixes header markup, and looks up users based on Guids, using the Azure CLI - this needs to be installed and configured separately (along with the `azure-devops` plugin), the plugins will fail if it is not installed and authenticated.  It caches the user lookups in a local file for subsequent loads - as it isn't fast.
+
+## Setup of AZ cli
+
+  - Install CLI https://docs.microsoft.com/en-us/cli/azure/install-azure-cli
+  - Login: `az login`
+  - Install devops plugin: `az extension add --name azure-devops`
+  - Set your organisation: `az devops configure --defaults organization=https://dev.azure.com/infinitas/`
+  - If you have an issue with login, use: https://docs.microsoft.com/en-gb/azure/devops/cli/log-in-via-pat?view=azure-devops&tabs=windows
 
 # To-Do / Known issues
 
