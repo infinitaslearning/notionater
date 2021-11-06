@@ -329,7 +329,7 @@ const start = async () => {
   const files = await fg([options.glob]);
 
   if (!files.length) {
-    debug('No files found to import, make sure you add your glob in quotes: -g "folder/**/**.md"');
+    console.log('No files found to import, make sure you add your glob in quotes: -g "folder/**/**.md"');
     return;
   }
 
@@ -341,7 +341,7 @@ const start = async () => {
   });
 
   if (!response.results.length) {
-    debug('No pages found!');
+    console.log('No pages found - try a different base page search?');
     return;
   }
 
