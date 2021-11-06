@@ -6,7 +6,7 @@ const { Command } = require('commander');
 const { Client } = require("@notionhq/client");
 const fg = require('fast-glob');
 const fs = require('fs');
-const {markdownToBlocks, markdownToRichText} = require('@instantish/martian');
+const {markdownToBlocks, markdownToRichText} = require('@tryfabric/martian');
 const plugins = [];
 const { toSentenceCase } = require('js-convert-case');
 
