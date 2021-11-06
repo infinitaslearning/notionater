@@ -10,6 +10,8 @@ const path = require('path');
 const {markdownToBlocks, markdownToRichText} = require('@tryfabric/martian');
 const plugins = [];
 const { toSentenceCase } = require('js-convert-case');
+const debug = require('debug')('notionater');
+const cliProgress = require('cli-progress')
 
 /**
  * Parse cmd line
@@ -59,7 +61,7 @@ const folderPaths = {};
 
 const processFilePath = async(path, parents, parentPageId) => {
   if (!folderPaths[path]) {
-    console.log('Creating folder page: ' + path + ' ...');
+    debug('Creating folder page: ' + path + ' ...');
     try {
       const response = await notion.pages.create({
         parent: {
@@ -86,7 +88,7 @@ const processFilePath = async(path, parents, parentPageId) => {
       // Store it for later
       folderPaths[path] = response.id;
     } catch(ex) {
-      console.log(ex.message);
+      debug(ex.message);
     }
   }
   return folderPaths[path];
@@ -129,7 +131,7 @@ const postParseTables = (blocks) => {
   return { filteredBlocks, tables };
 }
 
-const createTables = async (tables, parentPageId, parentPageTitle) => {
+const createTables = async (tables, parentPageId, parentPageTitle, overallProgress) => {
 
   // Now we have a page, create the tables!
   let tableNumber = 0;
@@ -159,7 +161,8 @@ const createTables = async (tables, parentPageId, parentPageTitle) => {
       }
     });
 
-    console.log(`Adding table to '${parentPageTitle}' with ${tableData.length} rows ...`);
+    debug(`Adding table to '${parentPageTitle}' with ${tableData.length} rows ...`);
+    const tableProgress = !process.env.DEBUG ? overallProgress.create(tableData.length, 0, { filename: `Creating table ${tableNumber} ...` }) : null;
 
     const database = await notion.databases.create({
       parent: {
@@ -173,6 +176,8 @@ const createTables = async (tables, parentPageId, parentPageTitle) => {
       }],
       properties: tableHeaderProperties
     });
+
+    !process.env.DEBUG ? tableProgress.increment() : null;
 
     const databaseId = database.id;
 
@@ -211,24 +216,32 @@ const createTables = async (tables, parentPageId, parentPageTitle) => {
         properties: tableDataProperties,
       });
 
+      !process.env.DEBUG ? tableProgress.increment() : null;
+
     }
+
+    overallProgress.remove(tableProgress);
 
   }
 }
 
-const processFile = async (file, parentPageId) => {
+const processFile = async (file, parentPageId, progress) => {
 
   // First we need to ensure we have all the parent pages created
   const path = file.split("/");
   const fileName = path.pop(); // lose the file
   let blocks, fileText;
+
+  const fileProgress = !process.env.DEBUG ? progress.create(path.length + 2, 0, { filename: `${fileName}` }) : null;
+
   const parents = await path.reduce(async (memo, path) => {
     const results = await memo;
     const result = await processFilePath(path, results, parentPageId);
+    !process.env.DEBUG ? fileProgress.increment() : null;
     return [...results, result];
   }, []);
-
-  console.log('Processing markdown file: ' + fileName + ' ...');
+  
+  debug('Processing markdown file: ' + fileName + ' ...');
 
   // Now create our actual file
   try {
@@ -237,7 +250,7 @@ const processFile = async (file, parentPageId) => {
     // Execute pre-parse plugins
     for (const plugin of plugins) {
       if(plugin.preParse) {
-        fileText = await plugin.preParse(fileText);
+        fileText = await plugin.preParse(fileText, progress);
       };
     };
 
@@ -247,13 +260,17 @@ const processFile = async (file, parentPageId) => {
     // Execute post-parse plugins
     for (const plugin of plugins) {
       if(plugin.postParse) {
-        blocks = await plugin.postParse(blocks, notion, options);
+        blocks = await plugin.postParse(blocks, notion, options, progress);
       };
     };
   } catch(ex) {
-    console.log(ex);
+    debug(ex);
+    fileProgress.stop();
+    progress.remove(fileProgress);
     return 'Failed';
   }
+
+  !process.env.DEBUG ? fileProgress.increment() : null;
 
   let { filteredBlocks, tables } = postParseTables(blocks);
 
@@ -279,14 +296,18 @@ const processFile = async (file, parentPageId) => {
       children: filteredBlocks,
     });
 
+    !process.env.DEBUG ? fileProgress.increment() : null;
+
     if (tables.length) {
-      await createTables(tables, response.id, pageTitle);
+      await createTables(tables, response.id, pageTitle, progress);
     }
 
-  } catch(ex) {
-    console.log(ex.message);
+  } catch(ex) {start
+    debug(ex.message);
   }
-
+    
+  fileProgress.stop();
+  progress.remove(fileProgress);
   return 'OK';
 }
 
@@ -296,7 +317,7 @@ const loadPlugins = (pluginsToLoad) => {
     try {
       plugins.push(require(`./plugins/${plugin}`));
     } catch(ex) {
-      console.log('Error loading plugin', ex.message);
+      debug('Error loading plugin', ex.message);
     }
   });
 }
@@ -308,7 +329,7 @@ const start = async () => {
   const files = await fg([options.glob]);
 
   if (!files.length) {
-    console.log('No files found to import, make sure you add your glob in quotes: -g "folder/**/**.md"');
+    debug('No files found to import, make sure you add your glob in quotes: -g "folder/**/**.md"');
     return;
   }
 
@@ -320,7 +341,7 @@ const start = async () => {
   });
 
   if (!response.results.length) {
-    console.log('No pages found!');
+    debug('No pages found!');
     return;
   }
 
@@ -348,11 +369,25 @@ const start = async () => {
     };
   };
 
+  // create new container
+  const progress = new cliProgress.MultiBar({
+      stopOnComplete: true,
+      clearOnComplete: true,
+      hideCursor: true,
+      fps: 10,
+      format: '[{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {filename}',
+  }, cliProgress.Presets.shades_grey);
+
+  const overallProgress = !process.env.DEBUG ? progress.create(files.length, 0, {filename: 'Overall progress'}) : null;
+
   const res = await files.reduce(async (memo, file) => {
     const results = await memo;
-    const result = await processFile(file, selectedPage.page);
+    const result = await processFile(file, selectedPage.page, progress);
+    !process.env.DEBUG ? overallProgress.increment() : null;
     return [...results, result];
   }, []);
+
+  progress.stop();
 
 }
 

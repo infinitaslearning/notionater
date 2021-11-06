@@ -11,18 +11,19 @@ const fg = require('fast-glob');
 const {stat, mkdir} = require('fs/promises')
 const modulePath = __dirname;
 const cacheFile = `${modulePath}/devops-cache.json`;
+const debug = require('debug')('notionater');
 
 // Only look up a user once, use the filesystem
 let userCache;
 try {
   userCache = require(cacheFile);
-  console.log(`Loaded ${Object.keys(userCache).length} users from cache :D`)
+  debug(`Loaded ${Object.keys(userCache).length} users from cache :D`)
 } catch(ex) {
-  console.log(`No users loaded from cache`);
+  debug(`No users loaded from cache`);
   userCache = {};
 }
 
-console.log('You must have the Azure CLI installed - https://docs.microsoft.com/en-us/cli/azure/install-azure-cli');
+debug('You must have the Azure CLI installed - https://docs.microsoft.com/en-us/cli/azure/install-azure-cli');
 
 // Persist the user cache because its damn slow
 const persistUserCache = () => {
@@ -30,24 +31,24 @@ const persistUserCache = () => {
 }
 
 // Lookup the user
-const lookupUser = async (user) => {
+const lookupUser = async (user, userProgress) => {
     if (userCache[user]) return userCache[user];
     // Go for it
     try {
       const userGuid = user.replace('@<','').replace('>','');
       const stdout = await spawn('az', ['devops', 'user', 'show', '--user', userGuid, '--query', 'user'])
+      !process.env.DEBUG ? userProgress.increment() : null;
       const userData = JSON.parse(stdout)
-      userCache[user] = `@${userData.displayName}`;
-      process.stdout.write(` ${userCache[user]}`);
+      userCache[user] = `@${userData.displayName}`;      
       persistUserCache();
       return userCache[user];
     } catch(ex) {
-      console.log(`Failed for ${user} with ${ex.message}`);
+      debug(`Failed for ${user} with ${ex.message}`);
       return user;  // Leave it alone
     }
 }
 
-exports.preParse = async (fileText) => {
+exports.preParse = async (fileText, overallProgress) => {
   // Devops does crazy things with headers, so lets give it some space
   fileText = fileText.replaceAll(/(^|[ ])(#{1,5})(?!#)(\S.*?)/ugm, `$2 $3`);
 
@@ -59,22 +60,23 @@ exports.preParse = async (fileText) => {
 
   if (devopsUsers && devopsUsers.length >> 0) {
     // Look them up
+    const userProgress = !process.env.DEBUG ? overallProgress.create(devopsUsers.length, 0, { filename: 'User lookup' }) : null;
     const lookupFns = [];
     for (const user of devopsUsers) {
-      lookupFns.push(lookupUser(user));
+      lookupFns.push(lookupUser(user, userProgress));
     };
-    process.stdout.write(`Looking up users ...`);
-    const result = await Promise.all(lookupFns);
-    process.stdout.write(`... done\n`);
+    debug(`Looking up ${lookupFns.length} users ...`);
+    const result = await Promise.all(lookupFns);    
     devopsUsers.forEach((user, index) => {
       fileText = fileText.replaceAll(user, result[index]);
     });
+    overallProgress.remove(userProgress);
   }
 
   return fileText;
 }
 
-exports.postParse = async (blocks, notion, options) => {
+exports.postParse = async (blocks, notion, options, overallProgress) => {
   const allowedTypes = [
     '.png',
     '.jpg',
@@ -87,6 +89,7 @@ exports.postParse = async (blocks, notion, options) => {
     '.heic',
   ];
   const postBlocks = [];
+  const blockProgress = !process.env.DEBUG ? overallProgress.create(blocks.length, 0, { filename: 'Image processing ...' }) : null;
   for(const index in blocks) {  
     const block = blocks[index];
     if (block.type === 'image') {      
@@ -105,22 +108,27 @@ exports.postParse = async (blocks, notion, options) => {
         if (fs.existsSync(file)) {
           // Send off 
           try {
-            console.log(`Uploading ${file} ...`);
+            debug(`Uploading ${file} ...`);
             const sendFile = await spawn('az', ['storage', 'blob', 'upload', '--file', `${file}`,'-c','$web','--account-name', options.azureBlobAccount]);            
+            !process.env.DEBUG ? blockProgress.increment() : null;
             const newUrl = `${options.azureBlobUrl}${encodeURI(fileName)}`;
             block.image.external.url = newUrl;
-            console.log(`File available at ${newUrl} ...`);            
+            debug(`File available at ${newUrl} ...`);            
             postBlocks.push(block);
           } catch(e) {
-            console.log(`Error uploading file: ${e.stderr.toString()}`);
+            !process.env.DEBUG ? blockProgress.increment() : null;
+            debug(`Error uploading file: ${e.stderr.toString()}`);
           }
         } else {
-          console.log(`Could not find image ${file} ... check the images path?`);
+          !process.env.DEBUG ? blockProgress.increment() : null;
+          debug(`Could not find image ${file} ... check the images path?`);
         }       
       }      
     } else {
+      !process.env.DEBUG ? blockProgress.increment() : null;
       postBlocks.push(block);
     }
-  };  
+  };
+  overallProgress.remove(blockProgress);
   return postBlocks;
 }
