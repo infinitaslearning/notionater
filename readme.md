@@ -17,15 +17,15 @@ First of all, you need to create an integration with Notion (you need to be an a
 
 Once you have created it, save the token, you need it later.
 
-You then need to share the pages you want to import against with the Integration you created, otherwise you can't see them.
+You then need to share the page you want to import against with the Integration you created, otherwise you can't see them.  Note that this will import directly into this page as sub-pages; so best if you are importing `Amazing Wiki`, best to create a page in Notion with this name, and import directly into it.
 
-Finally, go to a command line:
+To work, go to a command line:
 
 ```
-npx notionater -t secret_XXXX -g '**/**.md' -p 'Getting Started'
+npx notionater -t secret_XXXX -g '**/**.md' -p 'Amazing Wiki'
 ```
 
-It assumes that `my-folder` is a set of nested folders containing markdown.
+It assumes that the folder you are in is a set of nested folders containing markdown.
 
 For real usage, I recommend you use a config file as it makes it easier to manage (e.g. this is `config.json`)
 
@@ -35,7 +35,7 @@ For real usage, I recommend you use a config file as it makes it easier to manag
   "basePath": "/Users/cliftonc/work/Amazing.Wiki/",
   "glob": "**/**.md",
   "skipEmpty": true,
-  "basePage": "Import Landing Zone",  
+  "basePage": "Amazing Wiki",  
   "plugins": "devops",  
   "azureBlobUrl": "https://azureBlob.z6.web.core.windows.net/",
   "azureBlobAccount": "azureBlob"
@@ -53,7 +53,7 @@ npx notionater -c config.json
 You can add plugins to the plugins folder, and then use them from the command line (comma separated, no spaces).
 
 ```sh
-npx notionater -t secret_XXXX -g 'my-folder/**/**.md' -p 'Getting Started' -x devops
+npx notionater -t secret_XXXX -g '**/**.md' -p 'Amazing Wiki' -x devops
 ```
 
 Plugins can expose two async functions:

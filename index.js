@@ -226,15 +226,15 @@ const createTables = async (tables, parentPageId, parentPageTitle, overallProgre
 
 const processFile = async (file, parentPageId, progress) => {
   // First we need to ensure we have all the parent pages created
-  const path = file.split('/')
-  const fileName = path.pop() // lose the file
+  const pathList = file.split('/')
+  const fileName = pathList.pop() // lose the file
   let blocks, fileText
 
-  const fileProgress = !process.env.DEBUG ? progress.create(path.length + 2, 0, { filename: `${fileName}` }) : null
+  const fileProgress = !process.env.DEBUG ? progress.create(pathList.length + 2, 0, { filename: `${fileName}` }) : null
 
-  const parents = await path.reduce(async (memo, path) => {
+  const parents = await pathList.reduce(async (memo, innerFile) => {
     const results = await memo
-    const result = await processFilePath(path, results, parentPageId)
+    const result = await processFilePath(innerFile, results, parentPageId)
     if (!process.env.DEBUG) fileProgress.increment()
     return [...results, result]
   }, [])
@@ -243,7 +243,7 @@ const processFile = async (file, parentPageId, progress) => {
 
   // Now create our actual file
   try {
-    fileText = fs.readFileSync(file, 'utf8').toString()
+    fileText = fs.readFileSync(path.resolve(options.basePath, file), 'utf8').toString()
 
     if (!fileText) {
       debug('Skipping empty file', fileName)
@@ -382,7 +382,7 @@ const start = async () => {
 
   await files.reduce(async (memo, file) => {
     const results = await memo
-    const result = await processFile(path.resolve(options.basePath, file), selectedPage.page, progress)
+    const result = await processFile(file, selectedPage.page, progress)
     if (!process.env.DEBUG) overallProgress.increment()
     return [...results, result]
   }, [])
