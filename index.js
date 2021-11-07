@@ -142,9 +142,9 @@ const createTables = async (tables, parentPageId, parentPageTitle, overallProgre
     const tableData = table.table.children.map((rows) => {
       return rows.table_row.children.map((cells) => {
         if (cells.table_cell.children) {
-          return cells.table_cell.children[0].text.content
+          return cells.table_cell.children[0].text
         } else {
-          return 'Column'
+          return { content: '' }
         }
       })
     })
@@ -153,11 +153,11 @@ const createTables = async (tables, parentPageId, parentPageTitle, overallProgre
 
     tableHeader.forEach((header, index) => {
       if (index === 0) {
-        tableHeaderProperties[header] = {
+        tableHeaderProperties[header.content] = {
           title: {}
         }
       } else {
-        tableHeaderProperties[header] = {
+        tableHeaderProperties[header.content] = {
           rich_text: {}
         }
       }
@@ -183,28 +183,25 @@ const createTables = async (tables, parentPageId, parentPageTitle, overallProgre
 
     const databaseId = database.id
 
-    for (const tableRow in tableData) {
+    // Traverse the database in reverse to ensure it ends up in the right order
+    for (const tableRow in tableData.reverse()) {
       const tableDataProperties = {}
 
       tableHeader.forEach((header, index) => {
         if (index === 0) {
-          tableDataProperties[header] = {
+          tableDataProperties[header.content] = {
             title: [
               {
                 type: 'text',
-                text: {
-                  content: tableData[tableRow][index] || ''
-                }
+                text: tableData[tableRow][index] || { content: '' }
               }
             ]
           }
         } else {
-          tableDataProperties[header] = {
+          tableDataProperties[header.content] = {
             rich_text: [{
               type: 'text',
-              text: {
-                content: tableData[tableRow][index] || ''
-              }
+              text: tableData[tableRow][index] || { content: '' }
             }]
           }
         }
