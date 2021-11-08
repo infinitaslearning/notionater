@@ -3,7 +3,7 @@
 require('dotenv').config()
 const prompts = require('prompts')
 const { Command } = require('commander')
-const { Client } = require('@notionhq/client')
+const { Client, LogLevel } = require('@notionhq/client')
 const fg = require('fast-glob')
 const fs = require('fs')
 const path = require('path')
@@ -58,7 +58,8 @@ if (!options.glob) {
 }
 
 const notion = new Client({
-  auth: options.token
+  auth: options.token,
+  logLevel: LogLevel.ERROR
 })
 
 const folderPaths = {}
@@ -153,11 +154,11 @@ const createTables = async (tables, parentPageId, parentPageTitle, overallProgre
 
     tableHeader.forEach((header, index) => {
       if (index === 0) {
-        tableHeaderProperties[header.content] = {
+        tableHeaderProperties[header.content || `Header ${index}`] = {
           title: {}
         }
       } else {
-        tableHeaderProperties[header.content] = {
+        tableHeaderProperties[header.content || `Header ${index}`] = {
           rich_text: {}
         }
       }
@@ -189,7 +190,7 @@ const createTables = async (tables, parentPageId, parentPageTitle, overallProgre
 
       tableHeader.forEach((header, index) => {
         if (index === 0) {
-          tableDataProperties[header.content] = {
+          tableDataProperties[header.content || `Header ${index}`] = {
             title: [
               {
                 type: 'text',
@@ -198,7 +199,7 @@ const createTables = async (tables, parentPageId, parentPageTitle, overallProgre
             ]
           }
         } else {
-          tableDataProperties[header.content] = {
+          tableDataProperties[header.content || `Header ${index}`] = {
             rich_text: [{
               type: 'text',
               text: tableData[tableRow][index] || { content: '' }
@@ -246,7 +247,7 @@ const processFile = async (file, parentPageId, progress) => {
       debug('Skipping empty file', fileName)
       if (!process.env.DEBUG) fileProgress.stop()
       progress.remove(fileProgress)
-      return 'Skipped'
+      return { status: 'Skipped', file }
     }
 
     // Execute pre-parse plugins
@@ -268,7 +269,7 @@ const processFile = async (file, parentPageId, progress) => {
     debug(ex)
     if (!process.env.DEBUG) fileProgress.stop()
     progress.remove(fileProgress)
-    return 'Failed'
+    return { status: 'Error', file, message: ex.message }
   }
 
   if (!process.env.DEBUG) fileProgress.increment()
@@ -304,11 +305,12 @@ const processFile = async (file, parentPageId, progress) => {
     }
   } catch (ex) {
     debug(ex.message)
+    return { status: 'Error', file, message: ex.message }
   }
 
   if (!process.env.DEBUG) fileProgress.stop()
   progress.remove(fileProgress)
-  return 'OK'
+  return { status: 'OK', file }
 }
 
 const loadPlugins = (pluginsToLoad) => {
@@ -376,15 +378,24 @@ const start = async () => {
   }, cliProgress.Presets.shades_grey)
 
   const overallProgress = !process.env.DEBUG ? progress.create(files.length, 0, { filename: 'Overall progress' }) : null
+  const errorFiles = []
 
   await files.reduce(async (memo, file) => {
     const results = await memo
     const result = await processFile(file, selectedPage.page, progress)
+    if (result.status === 'Error') {
+      errorFiles.push(result)
+    };
     if (!process.env.DEBUG) overallProgress.increment()
     return [...results, result]
   }, [])
 
   progress.stop()
+
+  if (errorFiles.length) {
+    fs.writeFileSync('notionater-errors.json', JSON.stringify({ errors: errorFiles }))
+    console.log(`There were ${errorFiles.length} errors, written to 'notionater-errors.txt'`)
+  }
 }
 
 start()

@@ -53,6 +53,9 @@ exports.preParse = async (fileText, overallProgress) => {
   // Replace tabs with 2 spaces
   fileText = fileText.replaceAll(/\t/g, '  ')
 
+  // Replace table header format |:- to |--
+  fileText = fileText.replaceAll(/\|:-/g, '|--')
+
   // Look for users: @<04FF2889-BB6F-64C0-BF9F-F7A5570712C6>
   const devopsUsers = fileText.match(/@<([a-zA-Z\-0-9]*)>/g)
 
