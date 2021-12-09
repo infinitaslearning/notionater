@@ -25,6 +25,7 @@ program
   .option('-p, --plugins <plugins>', 'Add plugins to the processing chain, e.g. -x devops-users', 'none')
   .option('-c, --config <config>', 'Path to a config json file')
   .option('-s, --skipEmpty', 'Skip empty pages', false)
+  .option('-r, --relativePath', 'Relative image urls', false)
   .option('--azureBlobUrl <azureBlobUrl>', 'Azure blob storage url')
   .option('--azureBlobAccount <azureBlobAccount>', 'Azure Blob storage account')
 
@@ -111,7 +112,8 @@ const postParseTables = (blocks) => {
       // Create a dummy block
       tableNumber++
       tables.push(block)
-      filteredBlocks.push({
+
+      const paragraphBlock = {
         object: 'block',
         type: 'paragraph',
         paragraph: {
@@ -128,7 +130,9 @@ const postParseTables = (blocks) => {
             }
           ]
         }
-      })
+      }
+
+      filteredBlocks.push(paragraphBlock)
     }
   }
 
@@ -215,16 +219,18 @@ const createTables = async (tables, parentPageId, parentPageTitle, overallProgre
         properties: tableDataProperties
       })
 
-      if (!process.env.DEBUG) tableProgress.increment()
+      if (!process.env.DEBUG && tableProgress) tableProgress.increment()
     }
 
-    overallProgress.remove(tableProgress)
+    if (!process.env.DEBUG && overallProgress) overallProgress.remove(tableProgress)
   }
 }
 
 const processFile = async (file, parentPageId, progress) => {
   // First we need to ensure we have all the parent pages created
+  const parentFolder = options.basePath.match(/([^/]*)\/*$/)[1]
   const pathList = file.split('/')
+  pathList.unshift(parentFolder) // Pre-pend the parent folder
   const fileName = pathList.pop() // lose the file
   let blocks, fileText
 
@@ -233,7 +239,7 @@ const processFile = async (file, parentPageId, progress) => {
   const parents = await pathList.reduce(async (memo, innerFile) => {
     const results = await memo
     const result = await processFilePath(innerFile, results, parentPageId)
-    if (!process.env.DEBUG) fileProgress.increment()
+    if (!process.env.DEBUG) fileProgress?.increment()
     return [...results, result]
   }, [])
 
@@ -241,19 +247,20 @@ const processFile = async (file, parentPageId, progress) => {
 
   // Now create our actual file
   try {
-    fileText = fs.readFileSync(path.resolve(options.basePath, file), 'utf8').toString()
+    const currentFile = path.resolve(options.basePath, file)
+    fileText = fs.readFileSync(currentFile, 'utf8').toString()
 
     if (!fileText) {
       debug('Skipping empty file', fileName)
       if (!process.env.DEBUG) fileProgress.stop()
-      progress.remove(fileProgress)
+      if (!process.env.DEBUG && progress) progress.remove(fileProgress)
       return { status: 'Skipped', file }
     }
 
     // Execute pre-parse plugins
     for (const plugin of plugins) {
       if (plugin.preParse) {
-        fileText = await plugin.preParse(fileText, progress)
+        fileText = await plugin.preParse(fileText, progress, currentFile)
       };
     };
 
@@ -262,17 +269,17 @@ const processFile = async (file, parentPageId, progress) => {
     // Execute post-parse plugins
     for (const plugin of plugins) {
       if (plugin.postParse) {
-        blocks = await plugin.postParse(blocks, notion, options, progress)
+        blocks = await plugin.postParse(blocks, notion, options, progress, currentFile)
       };
     };
   } catch (ex) {
     debug(ex)
-    if (!process.env.DEBUG) fileProgress.stop()
-    progress.remove(fileProgress)
+    if (!process.env.DEBUG && fileProgress) fileProgress.stop()
+    if (!process.env.DEBUG && progress) progress.remove(fileProgress)
     return { status: 'Error', file, message: ex.message }
   }
 
-  if (!process.env.DEBUG) fileProgress.increment()
+  if (!process.env.DEBUG && fileProgress) fileProgress.increment()
 
   const { filteredBlocks, tables } = postParseTables(blocks)
 
@@ -298,7 +305,7 @@ const processFile = async (file, parentPageId, progress) => {
       children: filteredBlocks
     })
 
-    if (!process.env.DEBUG) fileProgress.increment()
+    if (!process.env.DEBUG && fileProgress) fileProgress.increment()
 
     if (tables.length) {
       await createTables(tables, response.id, pageTitle, progress)
@@ -308,8 +315,8 @@ const processFile = async (file, parentPageId, progress) => {
     return { status: 'Error', file, message: ex.message }
   }
 
-  if (!process.env.DEBUG) fileProgress.stop()
-  progress.remove(fileProgress)
+  if (!process.env.DEBUG && fileProgress) fileProgress.stop()
+  if (!process.env.DEBUG && progress) progress.remove(fileProgress)
   return { status: 'OK', file }
 }
 
@@ -357,12 +364,18 @@ const start = async () => {
     }
   })
 
-  const selectedPage = await prompts({
-    type: 'select',
-    name: 'page',
-    message: 'Choose the page to import under:',
-    choices: pages
-  })
+  let selectedPage = {}
+
+  if (pages.length > 1) {
+    selectedPage = await prompts({
+      type: 'select',
+      name: 'page',
+      message: 'Choose the page to import under:',
+      choices: pages
+    })
+  } else {
+    selectedPage = { page: pages[0].value }
+  }
 
   if (!selectedPage.page) {
     return
@@ -386,7 +399,7 @@ const start = async () => {
     if (result.status === 'Error') {
       errorFiles.push(result)
     };
-    if (!process.env.DEBUG) overallProgress.increment()
+    if (!process.env.DEBUG && overallProgress) overallProgress.increment()
     return [...results, result]
   }, [])
 

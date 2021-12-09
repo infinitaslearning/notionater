@@ -35,7 +35,7 @@ const lookupUser = async (user, userProgress) => {
   try {
     const userGuid = user.replace('@<', '').replace('>', '')
     const stdout = await spawn('az', ['devops', 'user', 'show', '--user', userGuid, '--query', 'user'])
-    if (!process.env.DEBUG) userProgress.increment()
+    if (!process.env.DEBUG && userProgress) userProgress.increment()
     const userData = JSON.parse(stdout)
     userCache[user] = `@${userData.displayName}`
     persistUserCache()
@@ -46,7 +46,7 @@ const lookupUser = async (user, userProgress) => {
   }
 }
 
-exports.preParse = async (fileText, overallProgress) => {
+exports.preParse = async (fileText, overallProgress, currentFile) => {
   // Devops does crazy things with headers, so lets give it some space
   fileText = fileText.replaceAll(/(^|[ ])(#{1,5})(?!#)(\S.*?)/ugm, '$2 $3')
 
@@ -71,13 +71,13 @@ exports.preParse = async (fileText, overallProgress) => {
     devopsUsers.forEach((user, index) => {
       fileText = fileText.replaceAll(user, result[index])
     })
-    overallProgress.remove(userProgress)
+    if (!process.env.DEBUG && overallProgress) overallProgress.remove(userProgress)
   }
 
   return fileText
 }
 
-exports.postParse = async (blocks, notion, options, overallProgress) => {
+exports.postParse = async (blocks, notion, options, overallProgress, currentFile) => {
   const allowedTypes = [
     '.png',
     '.jpg',
@@ -104,7 +104,14 @@ exports.postParse = async (blocks, notion, options, overallProgress) => {
         }
       } catch (ex) {
         // Need to upload
-        const file = path.join(options.basePath, decodeURI(imageUrl))
+        let file
+
+        if (options.relativePath) {
+          file = path.join(path.dirname(currentFile), decodeURI(imageUrl))
+        } else {
+          file = path.join(options.basePath, decodeURI(imageUrl))
+        }
+
         const fileName = path.basename(file)
         if (fs.existsSync(file)) {
           // Send off
@@ -117,19 +124,19 @@ exports.postParse = async (blocks, notion, options, overallProgress) => {
             debug(`File available at ${newUrl} ...`)
             postBlocks.push(block)
           } catch (e) {
-            if (!process.env.DEBUG) blockProgress.increment()
+            if (!process.env.DEBUG && blockProgress) blockProgress.increment()
             debug(`Error uploading file: ${e.stderr.toString()}`)
           }
         } else {
-          if (!process.env.DEBUG) blockProgress.increment()
+          if (!process.env.DEBUG && blockProgress) blockProgress.increment()
           debug(`Could not find image ${file} ... check the base path option?`)
         }
       }
     } else {
-      if (!process.env.DEBUG) blockProgress.increment()
+      if (!process.env.DEBUG && blockProgress) blockProgress.increment()
       postBlocks.push(block)
     }
   };
-  overallProgress.remove(blockProgress)
+  if (!process.env.DEBUG && overallProgress) overallProgress.remove(blockProgress)
   return postBlocks
 }
