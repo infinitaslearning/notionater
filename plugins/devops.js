@@ -56,6 +56,16 @@ exports.preParse = async (fileText, overallProgress, currentFile) => {
   // Replace table header format |:- to |--
   fileText = fileText.replaceAll(/\|:-/g, '|--')
 
+  // Replace pre and code with fenced ```
+  fileText = fileText.replaceAll(/<pre>/g, '\n```\n')
+  fileText = fileText.replaceAll(/<\/pre>/g, '\n```\n')
+  fileText = fileText.replaceAll(/<code lang="(\w.*)">/g, '\n```\n')
+  fileText = fileText.replaceAll(/<code>/g, '\n```\n')
+  fileText = fileText.replaceAll(/<\/code>/g, '\n```\n')
+
+  // Replace table header format |:- to |--
+  fileText = fileText.replaceAll(/\|:-/g, '|--')
+
   // Look for users: @<04FF2889-BB6F-64C0-BF9F-F7A5570712C6>
   const devopsUsers = fileText.match(/@<([a-zA-Z\-0-9]*)>/g)
 
